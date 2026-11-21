@@ -43,6 +43,19 @@ const envSchema = z.object({
 
   OLLAMA_BASE_URL: z.string().default('http://127.0.0.1:11434'),
   OLLAMA_MODEL: z.string().default('llama3.2'),
+
+  // Managed cloud chat. Keys live on the server, so operators never paste one
+  // into the browser. Either point AI_CLOUD_URL at an OpenAI-compatible relay
+  // that holds the credentials, or give this server the vendor keys directly.
+  AI_CLOUD_NAME: z.string().default('N Space Cloud'),
+  AI_CLOUD_URL: z.string().default(''),
+  AI_CLOUD_KEY: z.string().default(''),
+  AI_CLOUD_MODELS: z.string().default(''),
+  OPENAI_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  XAI_API_KEY: z.string().optional(),
+  CHAT_STREAM_TIMEOUT_MS: num(45000),
   FIRECRAWL_URL: z.string().optional(),
   FIRECRAWL_API_KEY: z.string().optional(),
 

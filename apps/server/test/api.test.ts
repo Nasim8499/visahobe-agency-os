@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { chromiumAvailable } from './helpers/chromium.js';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -255,7 +256,7 @@ describe('document vault', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('generates the real case documents', async () => {
+  it.skipIf(!chromiumAvailable)('generates the real case documents', async () => {
     const response = await app.inject({
       method: 'POST',
       url: `/api/cases/${caseId}/documents/generate`,
@@ -270,7 +271,7 @@ describe('document vault', () => {
     expect(payload.documents[0].size).toBeGreaterThan(500);
   });
 
-  it('marks draft templates as drafts', async () => {
+  it.skipIf(!chromiumAvailable)('marks draft templates as drafts', async () => {
     const response = await app.inject({
       method: 'POST',
       url: `/api/cases/${caseId}/documents/generate`,
