@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import WebSocket from 'ws';
+import { chromiumAvailable } from './helpers/chromium.js';
 
 const root = resolve(__dirname, '../..', '..');
 const API_PORT = 8799;
@@ -80,7 +81,7 @@ afterAll(async () => {
   await app?.close().catch(() => undefined);
 });
 
-describe('self-hosted browser worker', () => {
+describe.skipIf(!chromiumAvailable)('self-hosted browser worker', () => {
   it('reports the connected worker', async () => {
     const response = await app.inject({
       method: 'GET',

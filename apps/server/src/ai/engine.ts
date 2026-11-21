@@ -114,7 +114,7 @@ export async function buildContext(
   };
 }
 
-function renderContextForModel(ctx: AgentContext): string {
+export function renderContextForModel(ctx: AgentContext): string {
   if (!ctx.case) return 'No case is currently linked to this conversation.';
   const lines: string[] = [];
   lines.push(`Case ${ctx.case.reference} — ${ctx.case.country} / ${ctx.case.visaCategory}`);

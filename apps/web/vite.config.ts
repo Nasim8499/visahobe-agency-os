@@ -11,8 +11,11 @@ export default defineConfig({
     port: 5173,
     fs: { allow: ['..', '../..'] },
     proxy: {
-      '/api': { target: API_TARGET, changeOrigin: true, ws: true },
-      '/health': { target: API_TARGET, changeOrigin: true },
+      // changeOrigin stays false on purpose: the API treats "same host as the
+      // request" as a trusted origin, so forwarding the original Host header
+      // keeps tunnel/preview hosts working without an allow-list entry.
+      '/api': { target: API_TARGET, changeOrigin: false, ws: true },
+      '/health': { target: API_TARGET, changeOrigin: false },
     },
   },
   preview: {
@@ -20,8 +23,8 @@ export default defineConfig({
     allowedHosts: true,
     port: 4173,
     proxy: {
-      '/api': { target: API_TARGET, changeOrigin: true, ws: true },
-      '/health': { target: API_TARGET, changeOrigin: true },
+      '/api': { target: API_TARGET, changeOrigin: false, ws: true },
+      '/health': { target: API_TARGET, changeOrigin: false },
     },
   },
   build: { outDir: 'dist', sourcemap: true, target: 'es2022' },

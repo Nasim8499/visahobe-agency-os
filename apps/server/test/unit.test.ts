@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeAll } from 'vitest';
+import { chromiumAvailable } from './helpers/chromium.js';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -254,7 +255,7 @@ describe('browser planner and url policy', () => {
 });
 
 describe('document generation', () => {
-  it('produces a PDF and a DOCX and marks drafts explicitly', async () => {
+  it.skipIf(!chromiumAvailable)('produces a PDF and a DOCX and marks drafts explicitly', async () => {
     const { createApplicant } = await import('../src/domain/applicants.js');
     const { createCase } = await import('../src/domain/cases.js');
     const { buildCaseBundle } = await import('../src/routes/documents.js');

@@ -71,6 +71,34 @@ Providers: `ollama`, `openai`, `anthropic`, `gemini`, `deepseek`, `custom` (any 
 endpoint) and `builtin`. API keys are encrypted with AES-256-GCM before storage and are never
 returned by the API.
 
+## Real-time chat (`POST /api/chat`)
+
+The streaming path is separate from the tool-calling engine above and is what the Chat screen uses.
+
+```
+POST /api/chat (SSE)
+  ──▶ resolve/create conversation, create task, persist the user message
+  ──▶ build the same grounded context + enabled skills into the system prompt
+  ──▶ walk the model chain, first token wins:
+         1. managed cloud   (AI_CLOUD_URL relay, or server-held vendor keys)
+         2. agency providers (Settings → Providers, BYOK, self-hosted ones are reachability checked)
+         3. VisaHOBe Local Engine (offline, deterministic — always last, never fails)
+  ──▶ persist the assistant message + task result, emit `done`
+```
+
+Events on the wire: `start`, `model`, `delta`, `fallback`, `notice`, `done`, `error`, plus
+`: keep-alive` comments every 15 s so proxies do not close an idle stream.
+
+Failover rule: a candidate that throws **before** its first token is skipped and the client is told
+via `fallback`. Once tokens have reached the operator the turn is never silently restarted — the
+partial answer is kept and a `notice` explains what happened. Client aborts (Stop button, closed tab)
+abort the upstream request too, and the partial answer is still stored and marked `cancelled`.
+
+Transport details: `apps/server/src/ai/stream.ts` (OpenAI-compatible, Gemini `?alt=sse`, Anthropic
+Messages, and a paced local generator) with a connect timeout and an idle timeout per stream;
+`apps/server/src/ai/chain.ts` builds and describes the chain for `GET /api/chat/models` and
+`POST /api/chat/probe`.
+
 ## Ten-step SOP
 
 `intake → ocr → passport_validity → country_checklist → gap_analysis → dossier →

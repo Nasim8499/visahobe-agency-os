@@ -202,3 +202,15 @@ export const CollapseIcon = ({ size = 22, ...props }: IconProps) => (
     <path d="M9 4v5H4M15 20v-5h5M15 4v5h5M9 20v-5H4" />
   </svg>
 );
+
+export const CloudIcon = ({ size = 22, ...props }: IconProps) => (
+  <svg {...base(size)} {...props}>
+    <path d="M7.2 18.5A4.2 4.2 0 0 1 6.6 10a5.6 5.6 0 0 1 10.8-1.3A3.9 3.9 0 0 1 17.6 18.5Z" />
+  </svg>
+);
+
+export const BoltIcon = ({ size = 22, ...props }: IconProps) => (
+  <svg {...base(size)} {...props}>
+    <path d="M13 2.5 5.5 13.5H11L10.5 21.5 18.5 10H13l0-7.5Z" />
+  </svg>
+);
