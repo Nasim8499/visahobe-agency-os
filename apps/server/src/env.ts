@@ -51,6 +51,8 @@ const envSchema = z.object({
   AI_CLOUD_URL: z.string().default(''),
   AI_CLOUD_KEY: z.string().default(''),
   AI_CLOUD_MODELS: z.string().default(''),
+  // Coarena Model API — one OpenAI-compatible key for every vendor.
+  COARENA_API_KEY: z.string().default(''),
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),

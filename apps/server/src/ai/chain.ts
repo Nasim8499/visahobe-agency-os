@@ -59,6 +59,47 @@ export interface CloudModelSpec {
  * this server holds that vendor's key.
  */
 export const CLOUD_CATALOGUE: CloudModelSpec[] = [
+  /* ---- Coarena Model API (one key serves every vendor below) ---- */
+  {
+    id: 'gpt-6-luna',
+    label: 'GPT-6 Luna',
+    vendor: 'relay',
+    model: 'gpt-6-luna',
+    keyEnv: 'COARENA_API_KEY',
+    baseUrl: 'https://coarena.ai/api/v1',
+  },
+  {
+    id: 'gpt-6-2-astra',
+    label: 'GPT-6.2 Astra',
+    vendor: 'relay',
+    model: 'gpt-6-2-astra',
+    keyEnv: 'COARENA_API_KEY',
+    baseUrl: 'https://coarena.ai/api/v1',
+  },
+  {
+    id: 'gemini-3-8-flash',
+    label: 'Gemini 3.8 Flash',
+    vendor: 'relay',
+    model: 'gemini-3-8-flash',
+    keyEnv: 'COARENA_API_KEY',
+    baseUrl: 'https://coarena.ai/api/v1',
+  },
+  {
+    id: 'deepseek-v4-1-flash-1017',
+    label: 'DeepSeek V4.1 Flash',
+    vendor: 'relay',
+    model: 'deepseek-v4-1-flash-1017',
+    keyEnv: 'COARENA_API_KEY',
+    baseUrl: 'https://coarena.ai/api/v1',
+  },
+  {
+    id: 'claude-sonnet-5-5',
+    label: 'Claude Sonnet 5.5',
+    vendor: 'relay',
+    model: 'claude-sonnet-5-5',
+    keyEnv: 'COARENA_API_KEY',
+    baseUrl: 'https://coarena.ai/api/v1',
+  },
   {
     id: 'gpt-4o-mini',
     label: 'GPT-4o mini',
