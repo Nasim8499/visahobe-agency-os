@@ -18,8 +18,28 @@ import {
 } from './icons';
 import { useAuth } from '../lib/auth';
 import { useInstall } from '../lib/install';
+import { statusLabel, useChatStatus } from '../lib/chatStatus';
 import { BrandMark } from './Brand';
 import { Sheet } from './ui';
+
+/** Honest live indicator: green only when a real model chain is reachable. */
+function LiveBadge({ online }: { online: boolean }) {
+  const status = useChatStatus();
+  const badge = online ? statusLabel(status) : ({ text: 'OFFLINE', tone: 'red' } as const);
+  const title = !online
+    ? 'This device has no network connection.'
+    : status.error
+      ? status.error
+      : status.live
+        ? `${status.cloudName} — ${status.candidates.filter((c) => c.available).length} model(s) ready`
+        : 'No cloud model configured — the offline Local Engine answers.';
+  return (
+    <Link to="/integrations" className={`live-badge ${badge.tone}`} title={title} aria-label={`AI status: ${badge.text}`}>
+      <i className="dot" />
+      {badge.text}
+    </Link>
+  );
+}
 
 const PRIMARY_NAV = [
   { to: '/', label: 'Home', Icon: HomeIcon },
@@ -36,7 +56,7 @@ const SECONDARY_NAV = [
   { to: '/sponsors', label: 'Sponsors', Icon: SponsorsIcon },
   { to: '/requirements', label: 'Country Requirements', Icon: GlobeIcon },
   { to: '/reports', label: 'Reports', Icon: ReportsIcon },
-  { to: '/integrations', label: 'Integrations', Icon: PlugIcon },
+  { to: '/integrations', label: 'Connect', Icon: PlugIcon },
   { to: '/settings', label: 'Settings', Icon: SettingsIcon },
 ] as const;
 
@@ -64,13 +84,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <BrandMark size={36} />
+      <header className="topbar">
+        <div className="row" style={{ gap: 10 }}>
+          <BrandMark size={30} />
           <div>
             <div className="brand-word">VisaHOBe</div>
             <div className="brand-sub">Agency OS</div>
           </div>
+        </div>
+        <LiveBadge online={online} />
+      </header>
+
+      <aside className="sidebar">
+        <div className="brand">
+          <BrandMark size={36} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="brand-word">VisaHOBe</div>
+            <div className="brand-sub">Agency OS</div>
+          </div>
+          <LiveBadge online={online} />
         </div>
         {PRIMARY_NAV.map(({ to, label, Icon }) => (
           <Link key={to} to={to} className="side-link" data-active={isActive(to)}>

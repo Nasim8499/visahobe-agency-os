@@ -4,8 +4,9 @@ import { COUNTRIES } from '@visahobe/shared';
 import { api } from '../api';
 import { useApi } from '../lib/useAsync';
 import { Card, EmptyState, Field, Loading, Pill, SectionTitle, Sheet, useToast } from '../components/ui';
-import { PlusIcon, RefreshIcon } from '../components/icons';
+import { BoltIcon, CloudIcon, PlusIcon, RefreshIcon } from '../components/icons';
 import { formatDate, SPONSOR_TONE } from '../lib/format';
+import { refreshChatStatus, statusLabel, useChatStatus } from '../lib/chatStatus';
 
 /* -------------------------------- More --------------------------------- */
 
@@ -16,7 +17,7 @@ export function MoreRoute() {
     { to: '/sponsors', label: 'Sponsor database', hint: 'Search, verify and link employers' },
     { to: '/requirements', label: 'Country requirements', hint: 'Source-linked, versioned rule base' },
     { to: '/reports', label: 'Reports', hint: 'Pipeline, readiness and sponsor statistics' },
-    { to: '/integrations', label: 'Integrations', hint: 'Google Workspace and Firecrawl' },
+    { to: '/integrations', label: 'Connect', hint: 'AI models, Google Workspace and Firecrawl' },
     { to: '/settings', label: 'Settings', hint: 'Providers, passport rules and administration' },
   ];
   return (
@@ -533,6 +534,119 @@ export function ReportsRoute() {
 
 /* ----------------------------- Integrations ----------------------------- */
 
+/** The managed AI relay: models this server can stream without any user key. */
+function NSpaceCloudCard() {
+  const toast = useToast();
+  const status = useChatStatus();
+  const [probing, setProbing] = useState(false);
+  const [probe, setProbe] = useState<Record<string, { ok: boolean; message: string; firstTokenMs?: number }>>({});
+
+  const runProbe = async () => {
+    setProbing(true);
+    try {
+      const { results } = await api.post<{
+        results: Array<{ id: string; ok: boolean; message: string; firstTokenMs?: number }>;
+      }>('/api/chat/probe', {});
+      const next: Record<string, { ok: boolean; message: string; firstTokenMs?: number }> = {};
+      for (const item of results) next[item.id] = { ok: item.ok, message: item.message, firstTokenMs: item.firstTokenMs };
+      setProbe(next);
+      await refreshChatStatus();
+      const ready = results.filter((item) => item.ok).length;
+      toast.push(`${ready} of ${results.length} models answered.`);
+    } catch (error) {
+      toast.push((error as Error).message, 'error');
+    } finally {
+      setProbing(false);
+    }
+  };
+
+  const badge = statusLabel(status);
+  const usable = status.candidates.filter((item) => item.available);
+
+  return (
+    <Card glass>
+      <div className="row-between" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+          <div className="avatar" style={{ background: 'rgba(47,107,255,.12)', color: 'var(--blue-deep)' }}>
+            <CloudIcon size={19} />
+          </div>
+          <div>
+            <div className="item-title">{status.cloudName}</div>
+            <div className="item-sub">
+              {status.relayConfigured
+                ? 'Managed relay — the API key stays on the server, operators never enter one.'
+                : usable.length
+                  ? 'Server-held vendor keys. Operators never enter a key.'
+                  : 'No cloud key on this server yet — chats run on the offline Local Engine.'}
+            </div>
+          </div>
+        </div>
+        <span className={`live-badge ${badge.tone}`}>
+          <i className="dot" />
+          {badge.text}
+        </span>
+      </div>
+
+      <div className="mt">
+        {status.loading && !status.candidates.length ? (
+          <Loading label="Reading the model chain…" />
+        ) : (
+          status.candidates.map((candidate, index) => {
+            const result = probe[candidate.id];
+            return (
+              <div key={candidate.id} className="model-row">
+                <div style={{ minWidth: 0 }}>
+                  <div className="model-name">
+                    <span className="model-order">{index + 1}</span>
+                    {candidate.label}
+                  </div>
+                  <div className="model-note">
+                    {result?.message ??
+                      candidate.note ??
+                      `${candidate.providerName} · ${candidate.model}${
+                        candidate.tier === 'byok' ? ' · configured in Settings' : ''
+                      }`}
+                  </div>
+                </div>
+                <Pill
+                  tone={
+                    result ? (result.ok ? 'green' : 'red') : candidate.available ? (candidate.tier === 'local' ? 'teal' : 'green') : 'amber'
+                  }
+                  dot
+                >
+                  {result
+                    ? result.ok
+                      ? `${result.firstTokenMs ?? 0} ms`
+                      : 'failed'
+                    : candidate.available
+                      ? candidate.tier === 'local'
+                        ? 'offline engine'
+                        : 'ready'
+                      : 'needs key'}
+                </Pill>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="row mt" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn small" onClick={() => void runProbe()} disabled={probing}>
+          <BoltIcon size={15} /> {probing ? 'Testing…' : 'Test models'}
+        </button>
+        <button className="btn ghost small" onClick={() => void refreshChatStatus()}>
+          <RefreshIcon size={15} /> Refresh
+        </button>
+      </div>
+      <div className="small muted mt">
+        Chat calls these models in order and uses the first one that answers; if one fails mid-chain the next
+        takes over automatically. The VisaHOBe Local Engine always closes the chain, so chat keeps working with
+        no internet and no key.
+      </div>
+    </Card>
+  );
+}
+
 export function IntegrationsRoute() {
   const toast = useToast();
   const integrations = useApi<any>('/api/integrations');
@@ -557,10 +671,15 @@ export function IntegrationsRoute() {
     <div>
       <header className="page-head">
         <div>
-          <h1 className="page-title">Integrations</h1>
-          <div className="page-sub">Optional connectors. The platform stays fully usable when they are off.</div>
+          <h1 className="page-title">Connect</h1>
+          <div className="page-sub">
+            AI models and optional connectors. The platform stays fully usable when they are off.
+          </div>
         </div>
       </header>
+
+      <SectionTitle>AI models</SectionTitle>
+      <NSpaceCloudCard />
 
       <SectionTitle>Google Workspace</SectionTitle>
       <Card glass>

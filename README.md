@@ -22,6 +22,8 @@ Everything runs on hardware you control. No paid cloud browser, no mandatory hos
 | Database | SQLite by default, PostgreSQL supported, versioned migrations, foreign keys and indexes | `apps/server/test/unit.test.ts` |
 | Five AI agents | Raffi, Nova, Maestro, Tanya, Zayyad — each with its own profile, conversation history, tools, task state, provider/model display | `apps/server/test/api.test.ts`, `/api/agents` |
 | Conversational chat | Real backend round-trip; agents call eight grounded tools (case, requirements, documents, passport validity, workflow, readiness, sponsors) | `POST /api/agents/chat` |
+| Real-time streaming chat | Server-Sent Events: tokens are forwarded as the model produces them, with a smooth typewriter in the UI, a Stop button and on-device history | `apps/server/test/chat.test.ts`, `apps/web/test/chat.test.ts` |
+| Automatic model failover | Ordered model chain (managed cloud → agency providers → Local Engine); a model that fails before its first token is skipped and the UI is told which one took over | `apps/server/test/chat.test.ts` |
 | Offline AI | **VisaHOBe Local Engine** — a deterministic, database-backed reasoner so the product works with no API key at all | `ai/builtin.ts` |
 | Local + BYOK AI | Ollama (local), OpenAI-compatible, Anthropic, Gemini, DeepSeek, custom endpoints; encrypted key storage, connection test | `ai/providers/*` |
 | Browser automation | Separate worker process, real Chromium, Playwright locators, task queue, structured logs | `apps/server/test/browser.test.ts` |
@@ -44,6 +46,10 @@ Everything runs on hardware you control. No paid cloud browser, no mandatory hos
 * Requirements are **unverified** until a staff member records the official source URL and date.
 * The six-month passport rule is **configuration**, not law — it is editable per country and category.
 * No government submission, receipt, appointment or visa outcome is ever fabricated.
+* The header **LIVE** badge is green only when a cloud model is actually configured and reachable; a
+  configured-but-dead local model server reports *not reachable*, and the badge falls back to **LOCAL**.
+* Chat answers are never scripted: they come from a real model stream, or — when none is reachable —
+  from the Local Engine, which says so in the answer and in the message metadata.
 
 ---
 
@@ -93,6 +99,34 @@ npm run dev                     # api :8787 · web :5173 · worker · local test
 Open <http://localhost:5173> and sign in with the bootstrap administrator
 (`BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`, default `admin@visahobe.local` / `VisaHOBe!2024`).
 
+> `better-sqlite3` is a native addon. On a host where it cannot be compiled or its prebuilt binary
+> cannot be downloaded, the server automatically falls back to Node's built-in `node:sqlite`
+> (Node ≥ 22.5). `GET /ready` reports which driver is in use.
+
+### Turning the chat LIVE
+
+Chat already works out of the box: with nothing configured, `POST /api/chat` streams an answer from
+the **VisaHOBe Local Engine** and the header badge reads **LOCAL**. To put real models in front of it,
+give the *server* the credentials — operators never type a key into the browser:
+
+```bash
+# Option A — one OpenAI-compatible relay holding every key ("N Space Cloud")
+AI_CLOUD_URL=https://your-relay.example/v1
+AI_CLOUD_KEY=sk-...
+AI_CLOUD_MODELS=gpt-4o-mini,gemini-2.5-flash,grok-4.3
+
+# Option B — direct vendor keys on this server
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=...
+XAI_API_KEY=...        # Grok 4.3 is a paid tier: add billing first
+```
+
+The chain is tried in order and the first model that produces a token wins. If one is out of quota or
+unreachable, the next takes over automatically and the UI shows *“… unavailable — switching model”*.
+**Connect → AI models** lists the whole chain and the **Test models** button opens a real stream
+against each one and reports the first-token latency. The badge turns green only when a non-local
+model is genuinely configured and reachable.
+
 ### Docker (self-hosted)
 
 ```bash
@@ -111,7 +145,9 @@ npm test        # server (unit + HTTP API + real browser worker) and web (PWA + 
 npm run typecheck
 ```
 
-Last executed result in this repository (**45 server + 13 web = 58 passing**):
+Last executed result in this repository (**43 server passing + 9 skipped, 23 web passing**). The
+skipped ones are the suites that drive a real Chromium: they are skipped — never faked — on a host
+where `npx playwright install chromium` has not run.
 
 | Suite | File | Tests | What it proves |
 | --- | --- | --- | --- |
@@ -120,6 +156,8 @@ Last executed result in this repository (**45 server + 13 web = 58 passing**):
 | Real browser worker | `apps/server/test/browser.test.ts` | 6 | worker connect, **real Chromium navigation to the local test site**, live preview frames over the authenticated WebSocket, real task execution with recorded activity, pause/resume (human takeover), **worker-disconnect detection** |
 | PWA configuration | `apps/web/test/pwa.test.ts` | 8 | manifest validity, icon presence, iOS meta tags, **service worker never caches API or private files**, 16px inputs, safe-area usage, mobile bottom nav vs desktop sidebar, liquid-glass styling |
 | UI components | `apps/web/test/components.test.tsx` | 5 | status pills, avatars, empty states, labelled fields |
+| Real-time chat | `apps/server/test/chat.test.ts` | 7 | authentication, **genuine incremental SSE streaming against a real upstream**, persistence of a streamed turn, **failover to the next model on upstream error**, Local Engine fallback when every model fails, model-chain reporting, real per-model probe |
+| Chat client | `apps/web/test/chat.test.ts` | 10 | SSE record parsing (partial buffers, CRLF, keep-alive), event dispatch order, fallback notification, HTTP error surfacing, typewriter pacing, on-device conversation store |
 
 The browser suite launches a real Chromium, drives the **local test site** in
 `apps/server/test/fixtures/site` and asserts live-preview frames, task execution, human-takeover

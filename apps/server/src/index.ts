@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { env } from './env.js';
-import { getDb, runMigrations } from './db/index.js';
+import { dbEngine, getDb, runMigrations } from './db/index.js';
 import { authPlugin } from './plugins/auth.js';
 import { AppError } from './lib/errors.js';
 import { authRoutes } from './routes/auth.js';
@@ -22,10 +22,12 @@ import { integrationRoutes } from './routes/integrations.js';
 import { reportRoutes } from './routes/reports.js';
 import { adminRoutes } from './routes/admin.js';
 import { skillRoutes } from './routes/skills.js';
+import { chatRoutes } from './routes/chat.js';
 import { seedDatabase } from './domain/seed.js';
 import { closeRenderer } from './services/docs/render.js';
 import { closeScraper } from './services/web/scrape.js';
 import { hub } from './browser/hub.js';
+import { describeChain } from './ai/chain.js';
 
 export async function buildServer() {
   const app = Fastify({
@@ -104,11 +106,20 @@ export async function buildServer() {
       reply.code(503);
       return { status: 'not_ready', database: 'unreachable' };
     }
+    let chat = { live: false, models: 0 };
+    try {
+      const chain = await describeChain();
+      chat = { live: chain.live, models: chain.candidates.filter((c) => c.available).length };
+    } catch {
+      /* chat status is informational only */
+    }
     return {
       status: 'ready',
       database: 'ok',
+      databaseEngine: dbEngine(),
       browserWorker: hub.connected ? 'connected' : 'not_connected',
-      aiProvider: 'available',
+      aiProvider: chat.live ? 'cloud_streaming' : 'local_engine',
+      chatModels: chat.models,
     };
   });
 
@@ -125,6 +136,7 @@ export async function buildServer() {
   await app.register(reportRoutes);
   await app.register(adminRoutes);
   await app.register(skillRoutes);
+  await app.register(chatRoutes);
 
   const webDistCandidates = [
     resolve(process.cwd(), '../web/dist'),

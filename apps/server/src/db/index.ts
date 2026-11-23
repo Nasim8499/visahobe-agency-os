@@ -38,25 +38,115 @@ function toPgParams(sql: string): string {
   return out;
 }
 
+/**
+ * The minimal synchronous SQLite surface the server needs. `better-sqlite3` is
+ * the preferred driver, but it is a native addon: on hosts where it cannot be
+ * compiled or its prebuilt binary cannot be downloaded, Node's own `node:sqlite`
+ * module provides the same semantics. The app must never fail to boot because
+ * of a missing native build.
+ */
+interface SqliteStatement {
+  all(...params: any[]): any[];
+  get(...params: any[]): any;
+  run(...params: any[]): { changes: number | bigint };
+}
+
+interface SqliteDriver {
+  prepare(sql: string): SqliteStatement;
+  exec(sql: string): void;
+  close(): void;
+  pragma(source: string): void;
+}
+
+/** node:sqlite accepts null, number, bigint, string and Uint8Array only. */
+function toDriverParams(params: any[]): any[] {
+  return params.map((value) => {
+    if (value === undefined) return null;
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    return value;
+  });
+}
+
+/** Rows from node:sqlite are null-prototype objects; normalise them. */
+function toPlainRow(row: any): any {
+  return row === undefined || row === null ? row : Object.assign({}, row);
+}
+
+function openSqliteDriver(file: string): { driver: SqliteDriver; engine: string } {
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(file);
+    return {
+      engine: 'better-sqlite3',
+      driver: {
+        prepare: (sql: string) => db.prepare(sql),
+        exec: (sql: string) => db.exec(sql),
+        close: () => db.close(),
+        pragma: (source: string) => db.pragma(source),
+      },
+    };
+  } catch (nativeError) {
+    let DatabaseSync: any;
+    try {
+      ({ DatabaseSync } = require('node:sqlite'));
+    } catch {
+      throw new Error(
+        'No SQLite driver available. Install better-sqlite3 (native build) or run on Node 22.5+ ' +
+          `for the built-in node:sqlite module. Original error: ${(nativeError as Error).message}`,
+      );
+    }
+    const db = new DatabaseSync(file);
+    return {
+      engine: 'node:sqlite',
+      driver: {
+        prepare: (sql: string) => {
+          const stmt = db.prepare(sql);
+          return {
+            all: (...params: any[]) => stmt.all(...toDriverParams(params)).map(toPlainRow),
+            get: (...params: any[]) => toPlainRow(stmt.get(...toDriverParams(params))),
+            run: (...params: any[]) => {
+              const info = stmt.run(...toDriverParams(params));
+              return { changes: Number(info?.changes ?? 0) };
+            },
+          };
+        },
+        exec: (sql: string) => db.exec(sql),
+        close: () => db.close(),
+        pragma: (source: string) => db.exec(`PRAGMA ${source}`),
+      },
+    };
+  }
+}
+
 class SqliteDb implements Db {
   readonly dialect: Dialect = 'sqlite';
-  private stmt: any;
+  readonly engine: string;
+  private stmt: SqliteDriver;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private file: string) {
-    const Database = require('better-sqlite3');
     mkdirSync(dirname(file), { recursive: true });
-    this.stmt = new Database(file);
+    const opened = openSqliteDriver(file);
+    this.stmt = opened.driver;
+    this.engine = opened.engine;
     // WAL needs shared-memory (-shm) support, which some network/FUSE mounts and
     // containers do not provide; fall back to the default journal rather than
     // failing to open the database at all.
     try {
       this.stmt.pragma('journal_mode = WAL');
     } catch {
-      this.stmt.pragma('journal_mode = DELETE');
+      try {
+        this.stmt.pragma('journal_mode = DELETE');
+      } catch {
+        /* the driver default journal is fine */
+      }
     }
-    this.stmt.pragma('foreign_keys = ON');
-    this.stmt.pragma('busy_timeout = 5000');
+    try {
+      this.stmt.pragma('foreign_keys = ON');
+      this.stmt.pragma('busy_timeout = 5000');
+    } catch {
+      /* optional tuning only */
+    }
   }
 
   async all<T = Row>(sql: string, params: SqlParam[] = []): Promise<T[]> {
@@ -67,7 +157,7 @@ class SqliteDb implements Db {
   }
   async run(sql: string, params: SqlParam[] = []): Promise<{ changes: number }> {
     const info = this.stmt.prepare(sql).run(...params);
-    return { changes: info.changes };
+    return { changes: Number(info.changes ?? 0) };
   }
   async exec(sql: string): Promise<void> {
     this.stmt.exec(sql);
@@ -174,6 +264,12 @@ export function getDb(): Db {
     ? new PostgresDb(env.DATABASE_URL)
     : new SqliteDb(resolve(process.cwd(), env.DB_FILE));
   return instance;
+}
+
+/** Human readable driver name for health endpoints and boot logs. */
+export function dbEngine(): string {
+  const db = getDb();
+  return db instanceof SqliteDb ? db.engine : 'pg';
 }
 
 export async function runMigrations(db: Db = getDb()): Promise<string[]> {
